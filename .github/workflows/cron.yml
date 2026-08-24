@@ -6,6 +6,13 @@ on:
       - completed
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: mimotion-master-write
+  cancel-in-progress: false
+
 jobs:
   repo-sync:
     runs-on: ubuntu-latest
@@ -15,14 +22,47 @@ jobs:
       - uses: actions/checkout@v3
         with:
           token: ${{ secrets.PAT }} #此处PAT需要申请，教程详见：README
+          ref: master
+          fetch-depth: 0
       - name: random cron
+        shell: bash
         run: |
+          set -euo pipefail
+
           source cron_convert.sh
           echo "configed CRON_HOURS ${{ vars.CRON_HOURS }}"
           persist_execute_log ${{ github.event_name }} ${{ vars.CRON_HOURS }}
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
-          git add .
+          git add -- .github/workflows/run.yml cron_change_time
+          if git diff --cached --quiet -- .github/workflows/run.yml cron_change_time; then
+            echo "No Random Cron changes to persist."
+            exit 0
+          fi
+
           current=`TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S'`
           git commit -m "[${current}] random cron trigger by ${{ github.event_name }}"
-          git push origin master
+
+          max_attempts=3
+          for attempt in $(seq 1 "$max_attempts"); do
+            git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
+
+            if ! git rebase origin/master; then
+              echo "::error::Random Cron changes conflict with remote changes. No repository data was overwritten."
+              git status --short
+              git rebase --abort || true
+              exit 1
+            fi
+
+            if git push origin HEAD:master; then
+              echo "Random Cron push succeeded."
+              exit 0
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "::error::Random Cron push failed after ${max_attempts} attempts."
+              exit 1
+            fi
+
+            echo "Remote branch changed, rebasing Random Cron commit before retry $((attempt + 1))/${max_attempts}..."
+          done
