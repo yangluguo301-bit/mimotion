@@ -31,7 +31,7 @@ jobs:
 
           source cron_convert.sh
           echo "configed CRON_HOURS ${{ vars.CRON_HOURS }}"
-          persist_execute_log ${{ github.event_name }} ${{ vars.CRON_HOURS }}
+          persist_execute_log "${{ github.event_name }}" "${{ vars.CRON_HOURS }}"
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
           git add -- .github/workflows/run.yml cron_change_time

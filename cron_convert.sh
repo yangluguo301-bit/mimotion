@@ -77,7 +77,7 @@ function convert_utc_to_shanghai {
 
 function persist_execute_log {
   local event_name=$1
-  local new_cron_hours=$2
+  local new_cron_hours="${2:-}"
   echo "trigger by: ${event_name}" > cron_change_time
   {
     echo "current system time:"
